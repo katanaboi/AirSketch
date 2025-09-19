@@ -433,6 +433,7 @@ def main():
                             hand_landmarks,
                             dataset_creator.current_label,
                             "hand_landmarks_dataset",
+                            "auto"
                         )
                         cv2.circle(image, (50, 150), 15, (0, 255, 0), -1)
                         cv2.putText(
@@ -553,7 +554,7 @@ def main():
                     elif results.multi_hand_landmarks:
                         for hand_landmarks in results.multi_hand_landmarks:
                             dataset_creator.frame_counter += 1
-                            save_to_csv(hand_landmarks, dataset_creator.current_label, "hand_landmarks_dataset")
+                            save_to_csv(hand_landmarks, dataset_creator.current_label, "hand_landmarks_dataset", "manual")
                             print(f"Captured sample {dataset_creator.frame_counter} for '{dataset_creator.current_label}'")
                             break
                     else:

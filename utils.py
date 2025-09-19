@@ -117,11 +117,16 @@ def calculate_landmark_distances(landmarks):
     return distances
 
 
-def save_to_csv(landmarks, label, dataset_name="hand_landmarks_dataset"):
+def save_to_csv(landmarks, label, dataset_name="hand_landmarks_dataset", mode="auto"):
     os.makedirs("data", exist_ok=True)
-    filename = f"data/{dataset_name}.csv"
+    
+    # Add mode suffix to filename for manual mode
+    if mode == "manual":
+        filename = f"data/{dataset_name}_manual.csv"
+    else:
+        filename = f"data/{dataset_name}.csv"
+    
     landmark_points = extract_hand_landmark_points(landmarks)
-
     file_exists = os.path.exists(filename)
 
     try:

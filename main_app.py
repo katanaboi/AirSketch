@@ -151,17 +151,32 @@ class DatasetCreator:
 
 
 def handle_drawing(hand_landmarks, drawing_canvas, drawing_mode, prev_point, frame_counter, draw_interval=4):
-    """Handle finger drawing functionality"""
-    if not drawing_mode or frame_counter % draw_interval != 0:
+    """Handle finger drawing functionality with dynamic offset and smoothing"""
+    if not drawing_mode:
+        return None
+    
+    if frame_counter % draw_interval != 0:
         return prev_point
     
-    index_tip = hand_landmarks.landmark[8]
-    h, w = drawing_canvas.shape[:2]
-    finger_x = int((1.0 - index_tip.x) * w)
-    finger_y = int(index_tip.y * h)
+    thumb_tip = hand_landmarks.landmark[4]
+    thumb_mcp = hand_landmarks.landmark[2]
     
+    # Calculate offset relative to thumb tip to thumb MCP direction
+    offset_x = (thumb_tip.x - thumb_mcp.x) * 0.15
+    offset_y = (thumb_tip.y - thumb_mcp.y) * 0.15
+    
+    h, w = drawing_canvas.shape[:2]
+    current_x = int((1.0 - (thumb_tip.x + offset_x)) * w)
+    current_y = int((thumb_tip.y + offset_y) * h)
+    
+    # Apply smoothing to reduce shakiness
     if prev_point is not None:
+        smooth_factor = 0.3  # Much more smoothing (70% previous, 30% current)
+        finger_x = int(prev_point[0] * (1 - smooth_factor) + current_x * smooth_factor)
+        finger_y = int(prev_point[1] * (1 - smooth_factor) + current_y * smooth_factor)
         cv2.line(drawing_canvas, prev_point, (finger_x, finger_y), (50, 255, 50), 4)
+    else:
+        finger_x, finger_y = current_x, current_y
     
     return (finger_x, finger_y)
 
@@ -316,7 +331,6 @@ def main():
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     # Drawing variables
-    drawing_mode = False
     drawing_canvas = np.zeros((frame_height, frame_width, 3), dtype=np.uint8)
     prev_point = None
 
@@ -330,7 +344,7 @@ def main():
     print("- 'D' key: Toggle Dataset Creation Mode")
     print("- SPACE: Start/Stop data collection")
     print("- 'R' key: Start/Stop video recording")
-    print("- 'A' key: Toggle drawing mode")
+    print("- Pen gesture: Automatic drawing mode")
     print("- 'C' key: Clear drawing")
     print("- ESC: Exit program")
     print("\nStarting camera...")
@@ -377,11 +391,12 @@ def main():
                     if not dataset_creator.dataset_mode:
                         try:
                             prediction = gp.predict(hand_landmarks)
-                            predictions[i] = (
-                                str(prediction[0])
-                                if prediction is not None
-                                else "No gesture detected"
-                            )
+                            if prediction is not None:
+                                gesture, confidence = prediction
+                                predictions[i] = str(gesture)
+                                print(f"Gesture: {gesture}, Accuracy: {confidence:.2%}")
+                            else:
+                                predictions[i] = "No gesture detected"
                         except Exception as e:
                             print(f"Error in gesture prediction: {e}")
                             predictions[i] = "Error"
@@ -425,8 +440,9 @@ def main():
                             else "Left"
                         )  # Because the image is mirrored the label needs to be reverse
 
-                        # Handle drawing
-                        prev_point = handle_drawing(hand_landmarks, drawing_canvas, drawing_mode, prev_point, frame_counter)
+                        # Handle drawing based on gesture prediction
+                        is_pen_gesture = predictions.get(i, "").lower() == "pen"
+                        prev_point = handle_drawing(hand_landmarks, drawing_canvas, is_pen_gesture, prev_point, frame_counter)
 
                         draw_prediction_on_hand(
                             flipped_image,
@@ -443,9 +459,10 @@ def main():
             
             dataset_creator.display_instructions(flipped_image)
             
-            # Show drawing mode status
-            if drawing_mode:
-                cv2.putText(flipped_image, "DRAWING MODE: ON", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            # Show drawing status based on pen gesture detection
+            pen_detected = any(predictions.get(i, "").lower() == "pen" for i in predictions)
+            if pen_detected:
+                cv2.putText(flipped_image, "PEN DETECTED - DRAWING", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (50, 255, 50), 2)
 
             cv2.putText(
                 flipped_image,
@@ -530,10 +547,7 @@ def main():
             elif key in [ord("r"), ord("R")]:  # Toggle recording
                 video_recorder.toggle_recording(frame_width, frame_height)
             
-            elif key in [ord("a"), ord("A")]:  # Toggle drawing mode
-                drawing_mode = not drawing_mode
-                prev_point = None
-                print(f"Drawing mode: {'ON' if drawing_mode else 'OFF'}")
+
             
             elif key in [ord("c"), ord("C")]:  # Clear drawing
                 drawing_canvas = np.zeros((frame_height, frame_width, 3), dtype=np.uint8)

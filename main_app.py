@@ -1,16 +1,15 @@
 import os
-import time  # Added for FPS calculation
+import time
 from datetime import datetime
 
 import cv2
 import mediapipe as mp
 import numpy as np
 
-# from classifier import predict_gesture
-# from classifier2 import GesturePredictor
 from gesture_predictor import FastGesturePredictor
-from utils import extract_hand_landmark_points, save_to_csv
+from utils import save_to_csv
 
+os.makedirs("models/tflite", exist_ok=True)
 gp = FastGesturePredictor(tflite_model_path="models/tflite/gesture_classifier.tflite")
 
 mp_drawing = mp.solutions.drawing_utils
@@ -29,11 +28,9 @@ class DatasetCreator:
         """Display current mode and instructions on the image"""
         height, width = image.shape[:2]
 
-        # Background rectangle for text
         cv2.rectangle(image, (10, 10), (width - 10, 120), (0, 0, 0), -1)
         cv2.rectangle(image, (10, 10), (width - 10, 120), (255, 255, 255), 2)
 
-        # Mode status
         mode_text = "DATASET MODE: ON" if self.dataset_mode else "DATASET MODE: OFF"
         mode_color = (0, 255, 0) if self.dataset_mode else (0, 0, 255)
         cv2.putText(
@@ -41,13 +38,12 @@ class DatasetCreator:
         )
 
         if self.dataset_mode:
-            # Collection status
             if self.collecting:
                 status_text = f"COLLECTING: {self.current_label}"
-                status_color = (0, 255, 255)  # Yellow
+                status_color = (0, 255, 255)
             else:
                 status_text = "READY - Enter label and press SPACE to start"
-                status_color = (255, 255, 255)  # White
+                status_color = (255, 255, 255)
 
             cv2.putText(
                 image,
@@ -112,7 +108,6 @@ class DatasetCreator:
                     self.dataset_mode = False
                     return False
                 elif label:
-                    # Confirm the label with the user
                     print(f"\nYou entered: '{label}'")
                     confirm = input("Is this correct? (y/n/edit): ").strip().lower()
 
@@ -137,7 +132,7 @@ class DatasetCreator:
                                 )
                                 return True
                             else:
-                                continue  # Start over
+                                continue
                         else:
                             print("Empty label. Please try again.")
                             continue
@@ -155,42 +150,47 @@ class DatasetCreator:
         return True
 
 
+def handle_drawing(hand_landmarks, drawing_canvas, drawing_mode, prev_point, frame_counter, draw_interval=4):
+    """Handle finger drawing functionality"""
+    if not drawing_mode or frame_counter % draw_interval != 0:
+        return prev_point
+    
+    index_tip = hand_landmarks.landmark[8]
+    h, w = drawing_canvas.shape[:2]
+    finger_x = int((1.0 - index_tip.x) * w)
+    finger_y = int(index_tip.y * h)
+    
+    if prev_point is not None:
+        cv2.line(drawing_canvas, prev_point, (finger_x, finger_y), (50, 255, 50), 4)
+    
+    return (finger_x, finger_y)
+
+
 def draw_prediction_on_hand(
     flipped_image, hand_landmarks, prediction, width, hand_label
 ):
     """Draw prediction text near the hand with smooth positioning"""
     if hand_landmarks and prediction:
-        # Get image dimensions
         height, width = flipped_image.shape[:2]
 
-        # Calculate hand center (using wrist and middle finger MCP as reference)
-        wrist = hand_landmarks.landmark[0]  # Wrist landmark
-        middle_mcp = hand_landmarks.landmark[9]  # Middle finger MCP
+        wrist = hand_landmarks.landmark[0]
+        middle_mcp = hand_landmarks.landmark[9]
 
-        # Convert normalized coordinates to pixel coordinates
-        # Account for the fact that the image will be flipped for display
-        center_x = int(
-            (1.0 - (wrist.x + middle_mcp.x) / 2) * width
-        )  # Flip X coordinate
+        center_x = int((1.0 - (wrist.x + middle_mcp.x) / 2) * width)
         center_y = int((wrist.y + middle_mcp.y) / 2 * height)
 
-        # Position text above the hand center
         text_x = center_x - 50
         text_y = center_y - 40
 
-        # Ensure text stays within image bounds
         text_x = max(10, min(text_x, width - 200))
         text_y = max(30, min(text_y, height - 20))
 
-        # Create background rectangle for better readability
         text_size = cv2.getTextSize(prediction, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)[0]
         rect_x1 = text_x - 15
         rect_y1 = text_y - text_size[1] - 15
         rect_x2 = text_x + text_size[0] + 15
         rect_y2 = text_y + 10
 
-        # Draw rounded rectangle background with shadow effect
-        # Shadow
         shadow_offset = 3
         cv2.rectangle(
             flipped_image,
@@ -200,11 +200,9 @@ def draw_prediction_on_hand(
             -1,
         )
 
-        # Main background with gradient effect
         overlay = flipped_image.copy()
         cv2.rectangle(overlay, (rect_x1, rect_y1), (rect_x2, rect_y2), (40, 40, 40), -1)
 
-        # Add gradient effect (darker at bottom)
         gradient = np.zeros_like(overlay[rect_y1:rect_y2, rect_x1:rect_x2])
         for i in range(gradient.shape[0]):
             alpha = i / gradient.shape[0]
@@ -216,24 +214,21 @@ def draw_prediction_on_hand(
 
         cv2.addWeighted(overlay, 0.8, flipped_image, 0.2, 0, flipped_image)
 
-        # Draw border with rounded corners
         cv2.rectangle(
             flipped_image, (rect_x1, rect_y1), (rect_x2, rect_y2), (0, 200, 255), 2
         )
 
-        # Draw prediction text with better styling
         cv2.putText(
             flipped_image,
             prediction,
             (text_x, text_y),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.9,
-            (255, 255, 255),  # White color
+            (255, 255, 255),
             2,
             cv2.LINE_AA,
         )
 
-        # Draw hand label (Left/Right) below the prediction
         hand_text_y = text_y + 30
         cv2.putText(
             flipped_image,
@@ -241,12 +236,11 @@ def draw_prediction_on_hand(
             (text_x, hand_text_y),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
-            (200, 200, 100),  # Light yellow color
+            (200, 200, 100),
             2,
             cv2.LINE_AA,
         )
 
-        # Draw a subtle connecting line to hand
         cv2.line(
             flipped_image,
             (center_x, center_y),
@@ -262,51 +256,28 @@ class VideoRecorder:
         self.is_recording = False
         self.video_writer = None
         self.output_dir = "recordings"
-
-        # Create output directory if it doesn't exist
-        if not os.path.exists(self.output_dir):
-            os.makedirs(self.output_dir)
+        os.makedirs(self.output_dir, exist_ok=True)
 
     def start_recording(self, frame_width, frame_height, fps=20.0):
-        """Start recording video in MP4 format"""
-        # Generate filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = os.path.join(self.output_dir, f"hand_gesture_{timestamp}.mp4")
 
-        # Define the codec for MP4 and create VideoWriter object
-        # Try different codecs for MP4 compatibility
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # MP4 codec
-        self.video_writer = cv2.VideoWriter(
-            filename, fourcc, fps, (frame_width, frame_height)
-        )
-
-        if not self.video_writer.isOpened():
-            print("Error: Could not open video writer with MP4V codec. Trying H264...")
-            fourcc = cv2.VideoWriter_fourcc(*"h264")  # Alternative codec
+        for codec in ["mp4v", "h264", "XVID"]:
+            fourcc = cv2.VideoWriter_fourcc(*codec)
             self.video_writer = cv2.VideoWriter(
                 filename, fourcc, fps, (frame_width, frame_height)
             )
-
-            if not self.video_writer.isOpened():
-                print(
-                    "Error: Could not open video writer with H264 codec. Trying XVID..."
-                )
-                fourcc = cv2.VideoWriter_fourcc(*"XVID")  # Fallback codec
-                self.video_writer = cv2.VideoWriter(
-                    filename, fourcc, fps, (frame_width, frame_height)
-                )
-
-                if not self.video_writer.isOpened():
-                    print("Error: Could not open video writer with any codec.")
-                    return None
+            if self.video_writer.isOpened():
+                break
+        else:
+            print("Error: Could not open video writer with any codec.")
+            return None
 
         self.is_recording = True
-
         print(f"Started recording: {filename}")
         return filename
 
     def stop_recording(self):
-        """Stop recording video"""
         if self.is_recording and self.video_writer is not None:
             self.video_writer.release()
             self.video_writer = None
@@ -314,12 +285,10 @@ class VideoRecorder:
             print("Stopped recording")
 
     def write_frame(self, frame):
-        """Write a frame to the video file if recording"""
         if self.is_recording and self.video_writer is not None:
             self.video_writer.write(frame)
 
     def toggle_recording(self, frame_width, frame_height):
-        """Toggle recording state"""
         if self.is_recording:
             self.stop_recording()
         else:
@@ -327,15 +296,11 @@ class VideoRecorder:
 
 
 def main():
-    # Suppress TensorFlow and absl warnings
-    import os
-
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     import tensorflow as tf
 
     tf.get_logger().setLevel("ERROR")
 
-    # Suppress absl warnings
     try:
         import absl.logging
 
@@ -346,11 +311,14 @@ def main():
     dataset_creator = DatasetCreator()
     video_recorder = VideoRecorder()
 
-    # For webcam input:
     cap = cv2.VideoCapture(0)
-    # Let the camera keep its native resolution for better accuracy
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    # Drawing variables
+    drawing_mode = False
+    drawing_canvas = np.zeros((frame_height, frame_width, 3), dtype=np.uint8)
+    prev_point = None
 
     frame_counter = 0
     prev_frame_time = 0
@@ -362,6 +330,8 @@ def main():
     print("- 'D' key: Toggle Dataset Creation Mode")
     print("- SPACE: Start/Stop data collection")
     print("- 'R' key: Start/Stop video recording")
+    print("- 'A' key: Toggle drawing mode")
+    print("- 'C' key: Clear drawing")
     print("- ESC: Exit program")
     print("\nStarting camera...")
 
@@ -378,31 +348,22 @@ def main():
                 print("Ignoring empty camera frame.")
                 continue
 
-            # Calculate FPS
             new_frame_time = time.time()
             fps = 1 / (new_frame_time - prev_frame_time) if prev_frame_time > 0 else 0
             prev_frame_time = new_frame_time
 
-            # Process the image
             image.flags.writeable = False
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-            # Only process every other frame to improve performance
             if frame_counter % 1 == 0:
                 results = hands.process(image)
-            else:
-                # Reuse previous results for skipped frames
-                pass
 
-            # Draw the hand annotations on the image
             image.flags.writeable = True
             image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-            # Process hand landmarks
+            predictions = {}
             if results.multi_hand_landmarks:
                 for i, hand_landmarks in enumerate(results.multi_hand_landmarks):
-                    # Get hand label (Left or Right)
-                    hand_label = results.multi_handedness[i].classification[0].label
 
                     mp_drawing.draw_landmarks(
                         image,
@@ -412,85 +373,80 @@ def main():
                         mp_drawing_styles.get_default_hand_connections_style(),
                     )
 
-                    # Only predict gestures when NOT in dataset mode
+                    # Handle predictions and data collection
                     if not dataset_creator.dataset_mode:
                         try:
                             prediction = gp.predict(hand_landmarks)
-                            # Convert prediction to string if it's not None
-                            if prediction is not None:
-                                prediction = str(prediction)
-                            else:
-                                prediction = "No gesture detected"
+                            predictions[i] = (
+                                str(prediction[0])
+                                if prediction is not None
+                                else "No gesture detected"
+                            )
                         except Exception as e:
                             print(f"Error in gesture prediction: {e}")
-                            prediction = "Error"
+                            predictions[i] = "Error"
 
-                    # Save data if in collection mode
-                    if dataset_creator.collecting and dataset_creator.current_label:
+                    if (
+                        dataset_creator.collecting
+                        and dataset_creator.current_label
+                        and frame_counter % 1 == 0
+                    ):
                         frame_counter += 1
+                        print(
+                            f"Saving frame {frame_counter} with label: {dataset_creator.current_label}"
+                        )
+                        save_to_csv(
+                            hand_landmarks,
+                            dataset_creator.current_label,
+                            "hand_landmarks_dataset",
+                        )
+                        cv2.circle(image, (50, 150), 15, (0, 255, 0), -1)
+                        cv2.putText(
+                            image,
+                            "SAVING",
+                            (70, 160),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.6,
+                            (0, 255, 0),
+                            2,
+                        )
 
-                        # Save every 5th frame to avoid too much data
-                        if frame_counter % 1 == 0:
-                            print(
-                                f"Saving frame {frame_counter} with label: {dataset_creator.current_label}"
-                            )
-
-                            # Extract and save landmark points
-                            landmark_points = extract_hand_landmark_points(
-                                hand_landmarks
-                            )
-                            save_to_csv(
-                                hand_landmarks,
-                                dataset_creator.current_label,
-                                "hand_landmarks_dataset",
-                            )
-
-                            # Visual feedback - draw a green circle when saving
-                            cv2.circle(image, (50, 150), 15, (0, 255, 0), -1)
-                            cv2.putText(
-                                image,
-                                "SAVING",
-                                (70, 160),
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.6,
-                                (0, 255, 0),
-                                2,
-                            )
-
-            # Flip the image horizontally for a selfie-view display
             flipped_image = cv2.flip(image, 1)
-
-            # Write frame to video if recording
             video_recorder.write_frame(flipped_image)
 
-            # Draw prediction on the flipped image (after flipping)
+            # Draw predictions on flipped image
             if results.multi_hand_landmarks and not dataset_creator.dataset_mode:
                 for i, hand_landmarks in enumerate(results.multi_hand_landmarks):
                     try:
-                        # Get hand label (Left or Right)
-                        hand_label = results.multi_handedness[i].classification[0].label
+                        hand_label = (
+                            "Right"
+                            if results.multi_handedness[i].classification[0].label
+                            == "Left"
+                            else "Left"
+                        )  # Because the image is mirrored the label needs to be reverse
 
-                        prediction = gp.predict(hand_landmarks)
-                        if prediction is not None:
-                            prediction = str(prediction[0])
-                        else:
-                            prediction = "No gesture detected"
+                        # Handle drawing
+                        prev_point = handle_drawing(hand_landmarks, drawing_canvas, drawing_mode, prev_point, frame_counter)
 
-                        # Draw on the flipped image with correct coordinates
                         draw_prediction_on_hand(
                             flipped_image,
                             hand_landmarks,
-                            prediction,
+                            predictions.get(i, "No prediction"),
                             flipped_image.shape[1],
                             hand_label,
                         )
                     except Exception as e:
                         print(f"Error drawing prediction: {e}")
 
-            # Display instructions and status on the flipped image
+            # Overlay drawing canvas on flipped image
+            flipped_image = cv2.add(flipped_image, drawing_canvas)
+            
             dataset_creator.display_instructions(flipped_image)
+            
+            # Show drawing mode status
+            if drawing_mode:
+                cv2.putText(flipped_image, "DRAWING MODE: ON", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-            # Display FPS on screen
             cv2.putText(
                 flipped_image,
                 f"FPS: {int(fps)}",
@@ -501,9 +457,7 @@ def main():
                 1,
             )
 
-            # Display recording status
             if video_recorder.is_recording:
-                # Draw red circle to indicate recording
                 cv2.circle(
                     flipped_image,
                     (flipped_image.shape[1] - 20, 20),
@@ -521,71 +475,71 @@ def main():
                     1,
                 )
 
-            # Show the image
             cv2.imshow("Hand Landmark Dataset Creator", flipped_image)
 
-            # Handle key presses
-            key = cv2.waitKey(1) & 0xFF  # Reduced wait time for better responsiveness
+            key = cv2.waitKey(1) & 0xFF
 
-            if key == 27:  # ESC key
+            # Key handlers
+            if key == 27:  # ESC
                 print("\nExiting program...")
-                # Stop recording if active
                 if video_recorder.is_recording:
                     video_recorder.stop_recording()
                 break
 
-            elif key == ord("d") or key == ord("D"):  # Toggle dataset mode
+            elif key in [ord("d"), ord("D")]:  # Toggle dataset mode
                 dataset_creator.dataset_mode = not dataset_creator.dataset_mode
                 dataset_creator.collecting = False
                 dataset_creator.current_label = ""
                 frame_counter = 0
 
-                if dataset_creator.dataset_mode:
-                    print("\n" + "=" * 50)
-                    print("ENTERED DATASET CREATION MODE")
-                    print("=" * 50)
-                else:
-                    print("\n" + "=" * 50)
-                    print("EXITED DATASET CREATION MODE")
-                    print("=" * 50)
+                mode_status = "ENTERED" if dataset_creator.dataset_mode else "EXITED"
+                print(f"\n{'=' * 50}\n{mode_status} DATASET CREATION MODE\n{'=' * 50}")
 
-            elif key == ord(" "):  # SPACE key
-                if dataset_creator.dataset_mode:
-                    if not dataset_creator.collecting:
-                        # Try to get label and start collecting
-                        if dataset_creator.get_label_input():
-                            if dataset_creator.current_label:
-                                dataset_creator.collecting = True
-                                frame_counter = 0
-                                print(
-                                    f"\nStarted collecting data for label: '{dataset_creator.current_label}'"
-                                )
-                                print("Press SPACE again to stop collecting...")
-                    else:
-                        # Stop collecting
-                        dataset_creator.collecting = False
-                        print(
-                            f"\nStopped collecting data for label: '{dataset_creator.current_label}'"
-                        )
-                        print(f"Total frames collected: {frame_counter}")
-                        dataset_creator.current_label = ""
+            elif (
+                key == ord(" ") and dataset_creator.dataset_mode
+            ):  # Space in dataset mode
+                if not dataset_creator.collecting:
+                    # Start collecting
+                    if (
+                        dataset_creator.get_label_input()
+                        and dataset_creator.current_label
+                    ):
+                        dataset_creator.collecting = True
                         frame_counter = 0
-
-                        # Ask if user wants to continue with another label
-                        continue_choice = (
-                            input("Continue with another label? (y/n): ")
-                            .strip()
-                            .lower()
+                        print(
+                            f"\nStarted collecting data for label: '{dataset_creator.current_label}'"
                         )
-                        if continue_choice != "y":
-                            dataset_creator.dataset_mode = False
-                            print("Exited dataset creation mode.")
+                        print("Press SPACE again to stop collecting...")
+                else:
+                    # Stop collecting
+                    dataset_creator.collecting = False
+                    print(
+                        f"\nStopped collecting data for label: '{dataset_creator.current_label}'"
+                    )
+                    print(f"Total frames collected: {frame_counter}")
+                    dataset_creator.current_label = ""
+                    frame_counter = 0
 
-            elif key == ord("r") or key == ord("R"):  # Toggle recording
+                    if (
+                        input("Continue with another label? (y/n): ").strip().lower()
+                        != "y"
+                    ):
+                        dataset_creator.dataset_mode = False
+                        print("Exited dataset creation mode.")
+
+            elif key in [ord("r"), ord("R")]:  # Toggle recording
                 video_recorder.toggle_recording(frame_width, frame_height)
+            
+            elif key in [ord("a"), ord("A")]:  # Toggle drawing mode
+                drawing_mode = not drawing_mode
+                prev_point = None
+                print(f"Drawing mode: {'ON' if drawing_mode else 'OFF'}")
+            
+            elif key in [ord("c"), ord("C")]:  # Clear drawing
+                drawing_canvas = np.zeros((frame_height, frame_width, 3), dtype=np.uint8)
+                print("Drawing cleared")
 
     cap.release()
-    # Make sure to release video writer if still recording
     if video_recorder.is_recording:
         video_recorder.stop_recording()
     cv2.destroyAllWindows()

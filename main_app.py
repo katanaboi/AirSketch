@@ -20,6 +20,7 @@ mp_hands = mp.solutions.hands
 class DatasetCreator:
     def __init__(self):
         self.dataset_mode = False
+        self.manual_mode = False
         self.current_label = ""
         self.collecting = False
         self.frame_counter = 0
@@ -38,12 +39,20 @@ class DatasetCreator:
         )
 
         if self.dataset_mode:
-            if self.collecting:
-                status_text = f"COLLECTING: {self.current_label}"
-                status_color = (0, 255, 255)
+            if self.manual_mode:
+                if self.current_label:
+                    status_text = f"MANUAL: {self.current_label} - Press SPACE to capture"
+                    status_color = (0, 255, 0)
+                else:
+                    status_text = "Enter label first"
+                    status_color = (255, 255, 255)
             else:
-                status_text = "READY - Enter label and press SPACE to start"
-                status_color = (255, 255, 255)
+                if self.collecting:
+                    status_text = f"COLLECTING: {self.current_label}"
+                    status_color = (0, 255, 255)
+                else:
+                    status_text = "READY - Enter label and press SPACE to start"
+                    status_color = (255, 255, 255)
 
             cv2.putText(
                 image,
@@ -65,7 +74,7 @@ class DatasetCreator:
             )
             cv2.putText(
                 image,
-                "SPACE: Start/Stop | 'D': Toggle Dataset Mode | ESC: Exit",
+                "SPACE: Start/Stop | 'M': Manual | 'L': Change Label | ESC: Exit",
                 (20, 100),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.4,
@@ -94,7 +103,7 @@ class DatasetCreator:
 
     def get_label_input(self):
         """Get label input from user via console with confirmation"""
-        if not self.collecting:
+        if not self.collecting and not self.manual_mode:
             print("\n" + "=" * 50)
             print("DATASET CREATION MODE")
             print("=" * 50)
@@ -147,6 +156,12 @@ class DatasetCreator:
                 else:
                     print("Invalid label. Please enter a valid label.")
                     continue
+        elif self.manual_mode:
+            label = input("Enter label for manual capture: ").strip()
+            if label:
+                self.current_label = label
+                print(f"✓ Manual mode label: '{self.current_label}'")
+                return True
         return True
 
 
@@ -342,7 +357,9 @@ def main():
     print("=" * 40)
     print("Controls:")
     print("- 'D' key: Toggle Dataset Creation Mode")
-    print("- SPACE: Start/Stop data collection")
+    print("- SPACE: Start/Stop data collection (Auto) / Capture sample (Manual)")
+    print("- 'M' key: Toggle Manual/Automatic capture mode")
+    print("- 'L' key: Change label (Manual mode only)")
     print("- 'R' key: Start/Stop video recording")
     print("- Pen gesture: Automatic drawing mode")
     print("- 'C' key: Clear drawing")
@@ -401,9 +418,11 @@ def main():
                             print(f"Error in gesture prediction: {e}")
                             predictions[i] = "Error"
 
+                    # Automatic data collection (original functionality)
                     if (
                         dataset_creator.collecting
                         and dataset_creator.current_label
+                        and not dataset_creator.manual_mode
                         and frame_counter % 1 == 0
                     ):
                         frame_counter += 1
@@ -425,6 +444,8 @@ def main():
                             (0, 255, 0),
                             2,
                         )
+
+
 
             flipped_image = cv2.flip(image, 1)
             video_recorder.write_frame(flipped_image)
@@ -507,47 +528,62 @@ def main():
                 dataset_creator.dataset_mode = not dataset_creator.dataset_mode
                 dataset_creator.collecting = False
                 dataset_creator.current_label = ""
+                dataset_creator.manual_mode = False
                 frame_counter = 0
 
                 mode_status = "ENTERED" if dataset_creator.dataset_mode else "EXITED"
                 print(f"\n{'=' * 50}\n{mode_status} DATASET CREATION MODE\n{'=' * 50}")
 
-            elif (
-                key == ord(" ") and dataset_creator.dataset_mode
-            ):  # Space in dataset mode
-                if not dataset_creator.collecting:
-                    # Start collecting
-                    if (
-                        dataset_creator.get_label_input()
-                        and dataset_creator.current_label
-                    ):
-                        dataset_creator.collecting = True
-                        frame_counter = 0
-                        print(
-                            f"\nStarted collecting data for label: '{dataset_creator.current_label}'"
-                        )
-                        print("Press SPACE again to stop collecting...")
+            elif key in [ord("m"), ord("M")] and dataset_creator.dataset_mode:  # Toggle manual mode
+                dataset_creator.manual_mode = not dataset_creator.manual_mode
+                dataset_creator.collecting = False
+                dataset_creator.current_label = ""
+                
+                if dataset_creator.manual_mode:
+                    print("Switched to MANUAL capture mode")
+                    dataset_creator.get_label_input()
                 else:
-                    # Stop collecting
-                    dataset_creator.collecting = False
-                    print(
-                        f"\nStopped collecting data for label: '{dataset_creator.current_label}'"
-                    )
-                    print(f"Total frames collected: {frame_counter}")
-                    dataset_creator.current_label = ""
-                    frame_counter = 0
+                    print("Switched to AUTOMATIC capture mode")
 
-                    if (
-                        input("Continue with another label? (y/n): ").strip().lower()
-                        != "y"
-                    ):
-                        dataset_creator.dataset_mode = False
-                        print("Exited dataset creation mode.")
+            elif key == ord(" ") and dataset_creator.dataset_mode:  # Space key
+                if dataset_creator.manual_mode:
+                    # Manual capture
+                    if not dataset_creator.current_label:
+                        dataset_creator.get_label_input()
+                    elif results.multi_hand_landmarks:
+                        for hand_landmarks in results.multi_hand_landmarks:
+                            dataset_creator.frame_counter += 1
+                            save_to_csv(hand_landmarks, dataset_creator.current_label, "hand_landmarks_dataset")
+                            print(f"Captured sample {dataset_creator.frame_counter} for '{dataset_creator.current_label}'")
+                            break
+                    else:
+                        print("No hand detected - cannot capture sample")
+                else:
+                    # Automatic mode (original functionality)
+                    if not dataset_creator.collecting:
+                        if dataset_creator.get_label_input() and dataset_creator.current_label:
+                            dataset_creator.collecting = True
+                            frame_counter = 0
+                            print(f"\nStarted collecting data for label: '{dataset_creator.current_label}'")
+                            print("Press SPACE again to stop collecting...")
+                    else:
+                        dataset_creator.collecting = False
+                        print(f"\nStopped collecting data for label: '{dataset_creator.current_label}'")
+                        print(f"Total frames collected: {frame_counter}")
+                        dataset_creator.current_label = ""
+                        frame_counter = 0
+                        
+                        if input("Continue with another label? (y/n): ").strip().lower() != "y":
+                            dataset_creator.dataset_mode = False
+                            print("Exited dataset creation mode.")
 
             elif key in [ord("r"), ord("R")]:  # Toggle recording
                 video_recorder.toggle_recording(frame_width, frame_height)
             
 
+            
+            elif key in [ord("l"), ord("L")] and dataset_creator.dataset_mode and dataset_creator.manual_mode:  # Change label in manual mode
+                dataset_creator.get_label_input()
             
             elif key in [ord("c"), ord("C")]:  # Clear drawing
                 drawing_canvas = np.zeros((frame_height, frame_width, 3), dtype=np.uint8)

@@ -1,0 +1,8 @@
+{
+  "input_dim": 42,
+  "num_classes": 2,
+  "class_names": [
+    "Eraser",
+    "Pen"
+  ]
+}

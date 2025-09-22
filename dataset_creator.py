@@ -48,9 +48,9 @@ class DatasetCreator:
     def get_label_input(self):
         """Get label input from user via console with confirmation"""
         if not self.collecting and not self.manual_mode:
-            print("\\n" + "=" * 50)
+            print("\\n" + "=" * 10)
             print("DATASET CREATION MODE")
-            print("=" * 50)
+            print("=" * 10)
 
             while True:
                 label = input("Enter label for data collection (or 'quit' to exit dataset mode): ").strip()
@@ -103,7 +103,7 @@ class DatasetCreator:
         self.frame_counter = 0
         
         mode_status = "ENTERED" if self.dataset_mode else "EXITED"
-        print(f"\\n{'=' * 50}\\n{mode_status} DATASET CREATION MODE\\n{'=' * 50}")
+        print(f"\\n{'=' * 10}\\n{mode_status} DATASET CREATION MODE\\n{'=' * 10}")
 
     def toggle_manual_mode(self):
         """Toggle manual capture mode"""

@@ -70,12 +70,12 @@ class UIHandler:
                 (200, 200, 200), 1, cv2.LINE_AA)
 
     @staticmethod
-    def draw_legend(image, detection_mode, drawing_mode, dataset_mode):
+    def draw_legend(image, landmark_mode, detection_mode, drawing_mode, dataset_mode):
         """Draw Apple-style legend"""
         h, w = image.shape[:2]
         
         # Legend background
-        legend_w, legend_h = 280, 120
+        legend_w, legend_h = 280, 140
         x = w - legend_w - 20
         y = 20
         
@@ -92,13 +92,14 @@ class UIHandler:
         
         # Mode indicators
         modes = [
+            ("E", "Landmarks", landmark_mode, (100, 255, 100)),
+            ("Q", "Detection", detection_mode, (255, 200, 0)),
             ("W", "Drawing", drawing_mode, (0, 150, 255)),
-            ("D", "Dataset", dataset_mode, (255, 150, 0)),
-            ("ESC", "Exit", False, (255, 100, 100))
+            ("D", "Dataset", dataset_mode, (255, 150, 0))
         ]
         
         for i, (key, name, active, color) in enumerate(modes):
-            y_pos = y + 45 + i * 22
+            y_pos = y + 45 + i * 20
             
             # Key badge
             badge_color = color if active else (100, 100, 100)
@@ -110,7 +111,7 @@ class UIHandler:
             cv2.putText(image, name, (x + 45, y_pos - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.45, text_color, 1)
 
     @staticmethod
-    def draw_status_indicators(image, models_loaded, predictions, is_recording, fps):
+    def draw_status_indicators(image, detection_models_loaded, drawing_models_loaded, predictions, is_recording, fps):
         """Draw various status indicators on the image"""
         # FPS counter
         cv2.putText(image, f"FPS: {int(fps)}", (10, image.shape[0] - 10), 

@@ -3,17 +3,22 @@ import time
 import cv2
 import mediapipe as mp
 
-from gesture_predictor import initialize_models, predict_gesture
+from gesture_predictor import initialize_models, predict_gesture, predict_gesture_no_threshold
+from drawing_predictor import initialize_drawing_models, predict_drawing_gesture
 from drawing_handler import DrawingHandler
 from dataset_creator import DatasetCreator
 from video_recorder import VideoRecorder
 from ui_handler import UIHandler
 
 os.makedirs("models/tflite", exist_ok=True)
+os.makedirs("drawing_models/tflite", exist_ok=True)
 
 # Initialize models
-models_loaded = initialize_models()
-print("Models loaded successfully" if models_loaded else "Warning: Could not load models - dataset mode only")
+detection_models_loaded = initialize_models()
+drawing_models_loaded = initialize_drawing_models()
+print(f"Detection models: {'✓' if detection_models_loaded else '✗'}")
+print(f"Drawing models: {'✓' if drawing_models_loaded else '✗'}")
+print("Note: Detection mode uses threshold by default. Edit main_app.py line ~104 to toggle.")
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
@@ -42,8 +47,9 @@ def main():
     ui_handler = UIHandler()
     
     # App modes
-    detection_mode = True  # Default mode
-    drawing_mode = False
+    landmark_mode = True   # Default mode - just landmarks
+    detection_mode = False # Custom detection mode
+    drawing_mode = False   # Drawing mode
     
     frame_counter = 0
     prev_frame_time = 0
@@ -51,11 +57,10 @@ def main():
     print("AirSketch Application")
     print("=" * 40)
     print("Controls:")
-    print("- Default: Detection Mode (landmarks + labels visible)")
-    print("- 'D': Toggle Dataset Mode | SPACE: Start/Stop collection")
-    print("- 'W': Toggle Drawing Mode (drawing with pen/eraser)")
-    print("- 'M': Toggle Manual mode | 'L': Change label | 'R': Record")
-    print("- 'C': Clear drawing | ESC: Exit")
+    print("- Default: Landmark Mode (landmarks + hand labels)")
+    print("- 'Q': Detection Mode (custom gestures) | 'D': Dataset Mode")
+    print("- 'W': Drawing Mode (pen/eraser) | 'C': Clear drawing")
+    print("- 'M': Manual mode | 'L': Change label | 'R': Record | ESC: Exit")
     print("\nStarting camera...")
 
     with mp_hands.Hands(
@@ -87,25 +92,37 @@ def main():
             predictions = {}
             if results.multi_hand_landmarks:
                 for i, hand_landmarks in enumerate(results.multi_hand_landmarks):
-                    # Draw landmarks only in detection mode or dataset mode
-                    if detection_mode or dataset_creator.dataset_mode:
+                    # Draw landmarks (not in drawing mode)
+                    if not drawing_mode:
                         mp_drawing.draw_landmarks(
                             image, hand_landmarks, mp_hands.HAND_CONNECTIONS,
                             mp_drawing_styles.get_default_hand_landmarks_style(),
                             mp_drawing_styles.get_default_hand_connections_style()
                         )
 
-                    # Gesture prediction (only in drawing mode)
-                    if drawing_mode and models_loaded:
+                    # Gesture predictions
+                    if drawing_mode and drawing_models_loaded:
                         try:
-                            prediction = predict_gesture(hand_landmarks)
+                            prediction = predict_drawing_gesture(hand_landmarks)
                             if prediction:
                                 gesture, confidence = prediction
                                 predictions[i] = str(gesture)
                             else:
                                 predictions[i] = "?"
                         except Exception as e:
-                            print(f"Error in prediction: {e}")
+                            predictions[i] = "?"
+                    elif detection_mode and detection_models_loaded:
+                        try:
+                            # Use threshold-based prediction (comment/uncomment as needed)
+                            prediction = predict_gesture(hand_landmarks)  # WITH threshold
+                            # prediction = predict_gesture_no_threshold(hand_landmarks)  # WITHOUT threshold
+                            
+                            if prediction:
+                                gesture, confidence = prediction
+                                predictions[i] = str(gesture)
+                            else:
+                                predictions[i] = "?"
+                        except Exception as e:
                             predictions[i] = "?"
 
                     # Data collection
@@ -123,9 +140,9 @@ def main():
                         hand_label = ("Right" if results.multi_handedness[i].classification[0].label == "Left" else "Left")
                         
                         if drawing_mode and not dataset_creator.dataset_mode:
-                            # Drawing mode: handle drawing/erasing and show only pen/eraser indicators
-                            is_pen = models_loaded and predictions.get(i, "").lower() == "pen"
-                            is_eraser = models_loaded and predictions.get(i, "").lower() == "eraser"
+                            # Drawing mode: handle drawing/erasing
+                            is_pen = drawing_models_loaded and predictions.get(i, "").lower() == "pen"
+                            is_eraser = drawing_models_loaded and predictions.get(i, "").lower() == "eraser"
                             
                             if is_pen:
                                 drawing_handler.handle_drawing(hand_landmarks, frame_counter)
@@ -145,7 +162,15 @@ def main():
                                     flipped_image.shape[1], hand_label
                                 )
                         elif detection_mode and not dataset_creator.dataset_mode:
-                            # Detection mode: show landmarks and hand labels only
+                            # Detection mode: show all predictions including '?'
+                            prediction = predictions.get(i, "?")
+                            ui_handler.draw_prediction_on_hand(
+                                flipped_image, hand_landmarks, 
+                                prediction, 
+                                flipped_image.shape[1], hand_label
+                            )
+                        elif landmark_mode and not dataset_creator.dataset_mode:
+                            # Landmark mode: show only hand labels
                             ui_handler.draw_prediction_on_hand(
                                 flipped_image, hand_landmarks, 
                                 "", 
@@ -169,9 +194,9 @@ def main():
                 dataset_creator.display_instructions(flipped_image)
             else:
                 # Show Apple-style legend
-                ui_handler.draw_legend(flipped_image, detection_mode, drawing_mode, dataset_creator.dataset_mode)
+                ui_handler.draw_legend(flipped_image, landmark_mode, detection_mode, drawing_mode, dataset_creator.dataset_mode)
             
-            ui_handler.draw_status_indicators(flipped_image, models_loaded, predictions, 
+            ui_handler.draw_status_indicators(flipped_image, detection_models_loaded, drawing_models_loaded, predictions, 
                                             video_recorder.is_recording, fps)
 
             cv2.imshow("Hand Landmark Dataset Creator", flipped_image)
@@ -199,10 +224,22 @@ def main():
                 print("Drawing cleared")
             elif key in [ord("w"), ord("W")]:
                 if not dataset_creator.dataset_mode:
-                    drawing_mode = not drawing_mode
-                    detection_mode = not drawing_mode
-                    mode_name = "DRAWING" if drawing_mode else "DETECTION"
-                    print(f"Switched to {mode_name} mode")
+                    drawing_mode = True
+                    detection_mode = False
+                    landmark_mode = False
+                    print("Switched to DRAWING mode")
+            elif key in [ord("q"), ord("Q")]:
+                if not dataset_creator.dataset_mode:
+                    detection_mode = True
+                    drawing_mode = False
+                    landmark_mode = False
+                    print("Switched to DETECTION mode")
+            elif key in [ord("e"), ord("E")]:
+                if not dataset_creator.dataset_mode:
+                    landmark_mode = True
+                    detection_mode = False
+                    drawing_mode = False
+                    print("Switched to LANDMARK mode")
 
     cap.release()
     if video_recorder.is_recording:

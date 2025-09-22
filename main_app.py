@@ -11,6 +11,9 @@ from utils import save_to_csv
 
 os.makedirs("models/tflite", exist_ok=True)
 
+# Configuration
+ERASER_SIZE = 70  # Change this value to adjust eraser circle size
+
 # Initialize the models once at startup
 models_loaded = initialize_models()
 if not models_loaded:
@@ -189,7 +192,7 @@ def draw_thumb_tip_indicator(image, hand_landmarks):
     cv2.circle(image, (dot_x, dot_y), 10, (255, 255, 255), 2)
 
 
-def handle_drawing(hand_landmarks, drawing_canvas, drawing_mode, prev_point, frame_counter, draw_interval=5):
+def handle_drawing(hand_landmarks, drawing_canvas, drawing_mode, prev_point, frame_counter, draw_interval=1):
     """Handle finger drawing functionality with dynamic offset and smoothing"""
     if not drawing_mode:
         return None
@@ -208,16 +211,68 @@ def handle_drawing(hand_landmarks, drawing_canvas, drawing_mode, prev_point, fra
     current_x = int((1.0 - (thumb_tip.x + offset_x)) * w)
     current_y = int((thumb_tip.y + offset_y) * h)
     
-    # Apply smoothing to reduce shakiness
+    # Apply heavy smoothing and movement threshold to reduce shakiness
     if prev_point is not None:
-        smooth_factor = 0.5  # Much more smoothing (70% previous, 30% current)
+        smooth_factor = 0.85  # Heavy smoothing (85% previous, 15% current)
         finger_x = int(prev_point[0] * (1 - smooth_factor) + current_x * smooth_factor)
         finger_y = int(prev_point[1] * (1 - smooth_factor) + current_y * smooth_factor)
-        cv2.line(drawing_canvas, prev_point, (finger_x, finger_y), (50, 255, 50), 4)
+        
+        # Only draw if movement is significant enough (reduces tremor)
+        distance = ((finger_x - prev_point[0])**2 + (finger_y - prev_point[1])**2)**0.5
+        if distance > 4:  # Minimum movement threshold
+            cv2.line(drawing_canvas, prev_point, (finger_x, finger_y), (50, 255, 50), 8)
     else:
         finger_x, finger_y = current_x, current_y
     
     return (finger_x, finger_y)
+
+
+def handle_erasing(hand_landmarks, drawing_canvas, erasing_mode, prev_point, frame_counter, draw_interval=1):
+    """Handle eraser functionality using landmarks 7, 8, 11, 12 to form a circle"""
+    if not erasing_mode:
+        return None
+    
+    if frame_counter % draw_interval != 0:
+        return prev_point
+    
+    # Get landmarks 7, 8, 11, 12 (index finger tip, middle finger tip, ring finger tip, pinky tip)
+    landmarks = [hand_landmarks.landmark[i] for i in [7, 8, 11, 12]]
+    
+    # Calculate center of the eraser circle
+    center_x = sum(lm.x for lm in landmarks) / 4
+    center_y = sum(lm.y for lm in landmarks) / 4
+    
+    h, w = drawing_canvas.shape[:2]
+    eraser_x = int((1.0 - center_x) * w)
+    eraser_y = int(center_y * h)
+    
+    # Apply heavy smoothing
+    if prev_point is not None:
+        smooth_factor = 0.85  # Heavy smoothing for eraser too
+        eraser_x = int(prev_point[0] * (1 - smooth_factor) + eraser_x * smooth_factor)
+        eraser_y = int(prev_point[1] * (1 - smooth_factor) + eraser_y * smooth_factor)
+    
+    # Erase by drawing a black circle
+    cv2.circle(drawing_canvas, (eraser_x, eraser_y), ERASER_SIZE, (0, 0, 0), -1)
+    
+    return (eraser_x, eraser_y)
+
+
+def draw_eraser_indicator(image, hand_landmarks):
+    """Draw eraser circle indicator using landmarks 7, 8, 11, 12"""
+    landmarks = [hand_landmarks.landmark[i] for i in [7, 8, 11, 12]]
+    
+    # Calculate center of the eraser circle
+    center_x = sum(lm.x for lm in landmarks) / 4
+    center_y = sum(lm.y for lm in landmarks) / 4
+    
+    h, w = image.shape[:2]
+    circle_x = int((1.0 - center_x) * w)
+    circle_y = int(center_y * h)
+    
+    # Draw red circle to indicate eraser
+    cv2.circle(image, (circle_x, circle_y), ERASER_SIZE, (0, 0, 255), 3)
+    cv2.circle(image, (circle_x, circle_y), 5, (0, 0, 255), -1)
 
 
 def draw_prediction_on_hand(
@@ -415,6 +470,7 @@ def main():
 
             image.flags.writeable = True
             image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+            frame_counter += 1
 
             predictions = {}
             if results.multi_hand_landmarks:
@@ -459,9 +515,9 @@ def main():
                         and not dataset_creator.manual_mode
                         and frame_counter % 1 == 0
                     ):
-                        frame_counter += 1
+                        dataset_creator.frame_counter += 1
                         print(
-                            f"Saving frame {frame_counter} with label: {dataset_creator.current_label}"
+                            f"Saving frame {dataset_creator.frame_counter} with label: {dataset_creator.current_label}"
                         )
                         save_to_csv(
                             hand_landmarks,
@@ -496,13 +552,18 @@ def main():
                             else "Left"
                         )  # Because the image is mirrored the label needs to be reverse
 
-                        # Handle drawing based on gesture prediction (only if models are loaded)
+                        # Handle drawing and erasing based on gesture prediction (only if models are loaded)
                         is_pen_gesture = models_loaded and predictions.get(i, "").lower() == "pen"
-                        prev_point = handle_drawing(hand_landmarks, drawing_canvas, is_pen_gesture, prev_point, frame_counter)
+                        is_eraser_gesture = models_loaded and predictions.get(i, "").lower() == "eraser"
                         
-                        # Always show thumb tip indicator when models are loaded
-                        if models_loaded:
+                        if is_pen_gesture:
+                            prev_point = handle_drawing(hand_landmarks, drawing_canvas, True, prev_point, frame_counter)
                             draw_thumb_tip_indicator(flipped_image, hand_landmarks)
+                        elif is_eraser_gesture:
+                            prev_point = handle_erasing(hand_landmarks, drawing_canvas, True, prev_point, frame_counter)
+                            draw_eraser_indicator(flipped_image, hand_landmarks)
+                        else:
+                            prev_point = None
 
                         draw_prediction_on_hand(
                             flipped_image,
@@ -519,11 +580,14 @@ def main():
             
             dataset_creator.display_instructions(flipped_image)
             
-            # Show drawing status based on pen gesture detection (only if models are loaded)
+            # Show drawing/erasing status based on gesture detection (only if models are loaded)
             if models_loaded:
                 pen_detected = any(predictions.get(i, "").lower() == "pen" for i in predictions)
+                eraser_detected = any(predictions.get(i, "").lower() == "eraser" for i in predictions)
                 if pen_detected:
                     cv2.putText(flipped_image, "PEN DETECTED - DRAWING", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (50, 255, 50), 2)
+                elif eraser_detected:
+                    cv2.putText(flipped_image, "ERASER DETECTED - ERASING", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             else:
                 cv2.putText(flipped_image, "MODELS NOT LOADED - DATASET MODE ONLY", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
@@ -571,7 +635,7 @@ def main():
                 dataset_creator.collecting = False
                 dataset_creator.current_label = ""
                 dataset_creator.manual_mode = False
-                frame_counter = 0
+                dataset_creator.frame_counter = 0
 
                 mode_status = "ENTERED" if dataset_creator.dataset_mode else "EXITED"
                 print(f"\n{'=' * 50}\n{mode_status} DATASET CREATION MODE\n{'=' * 50}")
@@ -605,15 +669,15 @@ def main():
                     if not dataset_creator.collecting:
                         if dataset_creator.get_label_input() and dataset_creator.current_label:
                             dataset_creator.collecting = True
-                            frame_counter = 0
+                            dataset_creator.frame_counter = 0
                             print(f"\nStarted collecting data for label: '{dataset_creator.current_label}'")
                             print("Press SPACE again to stop collecting...")
                     else:
                         dataset_creator.collecting = False
                         print(f"\nStopped collecting data for label: '{dataset_creator.current_label}'")
-                        print(f"Total frames collected: {frame_counter}")
+                        print(f"Total frames collected: {dataset_creator.frame_counter}")
                         dataset_creator.current_label = ""
-                        frame_counter = 0
+                        dataset_creator.frame_counter = 0
                         
                         if input("Continue with another label? (y/n): ").strip().lower() != "y":
                             dataset_creator.dataset_mode = False

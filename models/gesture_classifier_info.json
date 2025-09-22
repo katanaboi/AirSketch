@@ -1,9 +1,11 @@
 {
   "input_dim": 42,
-  "num_classes": 3,
+  "num_classes": 5,
   "class_names": [
-    "?",
-    "Eraser",
-    "Pen"
+    1,
+    2,
+    3,
+    4,
+    5
   ]
 }

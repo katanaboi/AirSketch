@@ -6,11 +6,17 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
-from gesture_predictor import FastGesturePredictor
+from gesture_predictor import initialize_models, predict_gesture, predict_gesture_no_threshold
 from utils import save_to_csv
 
 os.makedirs("models/tflite", exist_ok=True)
-gp = FastGesturePredictor(tflite_model_path="models/tflite/gesture_classifier.tflite")
+
+# Initialize the models once at startup
+models_loaded = initialize_models()
+if not models_loaded:
+    print("Warning: Could not load models - running in dataset collection mode only")
+else:
+    print("Models loaded successfully")
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
@@ -165,7 +171,25 @@ class DatasetCreator:
         return True
 
 
-def handle_drawing(hand_landmarks, drawing_canvas, drawing_mode, prev_point, frame_counter, draw_interval=4):
+def draw_thumb_tip_indicator(image, hand_landmarks):
+    """Draw purple dot at thumb tip position with offset to show drawing position"""
+    thumb_tip = hand_landmarks.landmark[4]
+    thumb_mcp = hand_landmarks.landmark[2]
+    
+    # Calculate same offset as drawing function
+    offset_x = (thumb_tip.x - thumb_mcp.x) * 0.15
+    offset_y = (thumb_tip.y - thumb_mcp.y) * 0.15
+    
+    h, w = image.shape[:2]
+    dot_x = int((1.0 - (thumb_tip.x + offset_x)) * w)
+    dot_y = int((thumb_tip.y + offset_y) * h)
+    
+    # Draw purple dot
+    cv2.circle(image, (dot_x, dot_y), 8, (128, 0, 128), -1)
+    cv2.circle(image, (dot_x, dot_y), 10, (255, 255, 255), 2)
+
+
+def handle_drawing(hand_landmarks, drawing_canvas, drawing_mode, prev_point, frame_counter, draw_interval=5):
     """Handle finger drawing functionality with dynamic offset and smoothing"""
     if not drawing_mode:
         return None
@@ -186,7 +210,7 @@ def handle_drawing(hand_landmarks, drawing_canvas, drawing_mode, prev_point, fra
     
     # Apply smoothing to reduce shakiness
     if prev_point is not None:
-        smooth_factor = 0.3  # Much more smoothing (70% previous, 30% current)
+        smooth_factor = 0.5  # Much more smoothing (70% previous, 30% current)
         finger_x = int(prev_point[0] * (1 - smooth_factor) + current_x * smooth_factor)
         finger_y = int(prev_point[1] * (1 - smooth_factor) + current_y * smooth_factor)
         cv2.line(drawing_canvas, prev_point, (finger_x, finger_y), (50, 255, 50), 4)
@@ -405,15 +429,25 @@ def main():
                     )
 
                     # Handle predictions and data collection
-                    if not dataset_creator.dataset_mode:
+                    if not dataset_creator.dataset_mode and models_loaded:
                         try:
-                            prediction = gp.predict(hand_landmarks)
+                            # Use threshold-based prediction
+                            prediction = predict_gesture(hand_landmarks)
                             if prediction is not None:
                                 gesture, confidence = prediction
                                 predictions[i] = str(gesture)
-                                print(f"Gesture: {gesture}, Accuracy: {confidence:.2%}")
+                                print(f"Gesture: {gesture}, Confidence: {confidence:.2%}")
                             else:
                                 predictions[i] = "No gesture detected"
+                                
+                            # # Use no-threshold prediction
+                            # prediction = predict_gesture_no_threshold(hand_landmarks)
+                            # if prediction:
+                            #     gesture, confidence = prediction
+                            #     predictions[i] = str(gesture)
+                            #     print(f"Gesture: {gesture}, Confidence: {confidence:.2%}")
+                            # else:
+                            #     predictions[i] = "No gesture detected"
                         except Exception as e:
                             print(f"Error in gesture prediction: {e}")
                             predictions[i] = "Error"
@@ -462,9 +496,13 @@ def main():
                             else "Left"
                         )  # Because the image is mirrored the label needs to be reverse
 
-                        # Handle drawing based on gesture prediction
-                        is_pen_gesture = predictions.get(i, "").lower() == "pen"
+                        # Handle drawing based on gesture prediction (only if models are loaded)
+                        is_pen_gesture = models_loaded and predictions.get(i, "").lower() == "pen"
                         prev_point = handle_drawing(hand_landmarks, drawing_canvas, is_pen_gesture, prev_point, frame_counter)
+                        
+                        # Always show thumb tip indicator when models are loaded
+                        if models_loaded:
+                            draw_thumb_tip_indicator(flipped_image, hand_landmarks)
 
                         draw_prediction_on_hand(
                             flipped_image,
@@ -481,10 +519,13 @@ def main():
             
             dataset_creator.display_instructions(flipped_image)
             
-            # Show drawing status based on pen gesture detection
-            pen_detected = any(predictions.get(i, "").lower() == "pen" for i in predictions)
-            if pen_detected:
-                cv2.putText(flipped_image, "PEN DETECTED - DRAWING", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (50, 255, 50), 2)
+            # Show drawing status based on pen gesture detection (only if models are loaded)
+            if models_loaded:
+                pen_detected = any(predictions.get(i, "").lower() == "pen" for i in predictions)
+                if pen_detected:
+                    cv2.putText(flipped_image, "PEN DETECTED - DRAWING", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (50, 255, 50), 2)
+            else:
+                cv2.putText(flipped_image, "MODELS NOT LOADED - DATASET MODE ONLY", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
             cv2.putText(
                 flipped_image,

@@ -1,74 +1,109 @@
 import joblib
 import numpy as np
 import tensorflow as tf
-
+import json
+from typing import Tuple
 from utils import extract_hand_landmark_points
 
 
-class FastGesturePredictor:
-    def __init__(self, tflite_model_path):
-        import os
-        os.makedirs("models", exist_ok=True)
+class GesturePredictor:
+    def __init__(self):
+        self.classifier = None
+        self.autoencoder = None
+        self.class_names = None
+        self.threshold = None
         
+    def load_models(self) -> bool:
         try:
-            self.interpreter = tf.lite.Interpreter(model_path=tflite_model_path)
-            self.interpreter.allocate_tensors()
-        except Exception as e:
-            raise RuntimeError(f"Failed to load TFLite model: {str(e)}")
-
-        self.input_details = self.interpreter.get_input_details()
-        self.output_details = self.interpreter.get_output_details()
-
-        try:
-            label_encoder = joblib.load("models/label_encoder.pkl")
-            self.class_names = label_encoder.classes_
-        except FileNotFoundError:
-            raise FileNotFoundError(
-                "label_encoder.pkl not found. Please ensure the file exists in the correct directory."
-            )
-        except Exception as e:
-            raise RuntimeError(f"Failed to load label encoder: {str(e)}")
-
-    def predict(self, landmarks):
-        # Prepare the landmarks (same as before)
-        landmark_points = extract_hand_landmark_points(landmarks)
-
-        if len(landmark_points) != 42:
+            self.classifier = tf.lite.Interpreter("models/tflite/gesture_classifier.tflite")
+            self.classifier.allocate_tensors()
+            
+            self.autoencoder = tf.lite.Interpreter("models/tflite/autoencoder.tflite")
+            self.autoencoder.allocate_tensors()
+            
+            self.class_names = joblib.load("models/label_encoder.pkl").classes_
+            with open("models/threshold.json") as f:
+                self.threshold = json.load(f)["threshold"]
+            return True
+        except Exception:
+            return False
+    
+    def _prepare_landmarks(self, landmarks):
+        points = extract_hand_landmark_points(landmarks)
+        if len(points) != 42:
+            return None
+        
+        array = np.array(points, dtype=np.float32).reshape(21, 2)
+        array -= array[0]  # Normalize to wrist
+        return array.flatten().reshape(1, -1)
+    
+    def _get_reconstruction_error(self, data):
+        if not self.autoencoder:
+            return 0.0
+        
+        input_details = self.autoencoder.get_input_details()
+        output_details = self.autoencoder.get_output_details()
+        
+        self.autoencoder.set_tensor(input_details[0]["index"], data)
+        self.autoencoder.invoke()
+        reconstruction = self.autoencoder.get_tensor(output_details[0]["index"])
+        
+        return float(np.mean(np.square(data - reconstruction)))
+    
+    def _classify(self, data):
+        if not self.classifier:
             return "Error", 0.0
+        
+        input_details = self.classifier.get_input_details()
+        output_details = self.classifier.get_output_details()
+        
+        self.classifier.set_tensor(input_details[0]["index"], data)
+        self.classifier.invoke()
+        predictions = self.classifier.get_tensor(output_details[0]["index"])
+        
+        idx = np.argmax(predictions[0])
+        confidence = float(predictions[0][idx])
+        gesture = self.class_names[idx]
+        
+        return gesture, confidence
+    
+    def predict_with_threshold(self, landmarks) -> Tuple[str, float]:
+        """Predict gesture with anomaly detection"""
+        data = self._prepare_landmarks(landmarks)
+        if data is None:
+            return "Invalid", 0.0
+        
+        error = self._get_reconstruction_error(data)
+        if error > self.threshold:
+            return "?", 0.0
+        
+        return self._classify(data)
+    
+    def predict_without_threshold(self, landmarks) -> Tuple[str, float]:
+        """Predict gesture without anomaly detection"""
+        data = self._prepare_landmarks(landmarks)
+        if data is None:
+            return "Invalid", 0.0
+        
+        return self._classify(data)
 
-        # Convert and normalize
-        landmark_array = np.array(landmark_points, dtype=np.float32)
-        landmarks_reshaped = landmark_array.reshape(21, 2)
 
-        # Normalize to wrist
-        wrist_x = landmarks_reshaped[0, 0]
-        wrist_y = landmarks_reshaped[0, 1]
-        landmarks_reshaped[:, 0] -= wrist_x
-        landmarks_reshaped[:, 1] -= wrist_y
-
-        # Prepare for model
-        input_data = landmarks_reshaped.flatten().reshape(1, -1).astype(np.float32)
-
-        # Make prediction with fast model
-        self.interpreter.set_tensor(self.input_details[0]["index"], input_data)
-        self.interpreter.invoke()
-        predictions = self.interpreter.get_tensor(self.output_details[0]["index"])
-
-        # Get result
-        predicted_class_idx = np.argmax(predictions[0])
-        confidence = predictions[0][predicted_class_idx]
-        predicted_class = self.class_names[predicted_class_idx]
-
-        return predicted_class, float(confidence)
+_predictor = GesturePredictor()
 
 
-try:
-    FAST_PREDICTOR = FastGesturePredictor("models/tflite/gesture_classifier.tflite")
-except Exception as e:
-    print(f"Warning: Could not initialize gesture predictor: {e}")
-    FAST_PREDICTOR = None
+def initialize_models() -> bool:
+    return _predictor.load_models()
 
-def predict_gesture(landmarks):
-    if FAST_PREDICTOR is None:
-        return "Model not loaded", 0.0
-    return FAST_PREDICTOR.predict(landmarks)
+
+def predict_gesture(landmarks) -> Tuple[str, float]:
+    """Predict with threshold (default behavior)"""
+    return _predictor.predict_with_threshold(landmarks)
+
+
+def predict_gesture_no_threshold(landmarks) -> Tuple[str, float]:
+    """Predict without threshold for performance comparison"""
+    return _predictor.predict_without_threshold(landmarks)
+
+
+if __name__ != "__main__":
+    initialize_models()

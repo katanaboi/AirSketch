@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-ERASER_SIZE = 70
+ERASER_SIZE = 59
 
 class DrawingHandler:
     def __init__(self, frame_height, frame_width):

@@ -5,7 +5,7 @@ class UIHandler:
     @staticmethod
     def draw_prediction_on_hand(flipped_image, hand_landmarks, prediction, width, hand_label):
         """Draw prediction text near the hand with smooth positioning"""
-        if not hand_landmarks or not prediction:
+        if not hand_landmarks:
             return
 
         height, width = flipped_image.shape[:2]
@@ -21,6 +21,12 @@ class UIHandler:
 
         text_x = max(10, min(text_x, width - 200))
         text_y = max(30, min(text_y, height - 20))
+
+        # If no prediction, just show hand label
+        if not prediction:
+            cv2.putText(flipped_image, hand_label, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 
+                       0.7, (200, 200, 100), 2, cv2.LINE_AA)
+            return
 
         text_size = cv2.getTextSize(prediction, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)[0]
         rect_x1 = text_x - 15
@@ -64,23 +70,48 @@ class UIHandler:
                 (200, 200, 200), 1, cv2.LINE_AA)
 
     @staticmethod
+    def draw_legend(image, detection_mode, drawing_mode, dataset_mode):
+        """Draw Apple-style legend"""
+        h, w = image.shape[:2]
+        
+        # Legend background
+        legend_w, legend_h = 280, 120
+        x = w - legend_w - 20
+        y = 20
+        
+        # Rounded rectangle background
+        overlay = image.copy()
+        cv2.rectangle(overlay, (x, y), (x + legend_w, y + legend_h), (40, 40, 40), -1)
+        cv2.addWeighted(overlay, 0.85, image, 0.15, 0, image)
+        
+        # Border
+        cv2.rectangle(image, (x, y), (x + legend_w, y + legend_h), (200, 200, 200), 1)
+        
+        # Title
+        cv2.putText(image, "AirSketch", (x + 15, y + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        
+        # Mode indicators
+        modes = [
+            ("W", "Drawing", drawing_mode, (0, 150, 255)),
+            ("D", "Dataset", dataset_mode, (255, 150, 0)),
+            ("ESC", "Exit", False, (255, 100, 100))
+        ]
+        
+        for i, (key, name, active, color) in enumerate(modes):
+            y_pos = y + 45 + i * 22
+            
+            # Key badge
+            badge_color = color if active else (100, 100, 100)
+            cv2.rectangle(image, (x + 15, y_pos - 12), (x + 35, y_pos + 2), badge_color, -1)
+            cv2.putText(image, key, (x + 18, y_pos - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
+            
+            # Mode name
+            text_color = (255, 255, 255) if active else (150, 150, 150)
+            cv2.putText(image, name, (x + 45, y_pos - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.45, text_color, 1)
+
+    @staticmethod
     def draw_status_indicators(image, models_loaded, predictions, is_recording, fps):
         """Draw various status indicators on the image"""
-        # Model status
-        if models_loaded:
-            pen_detected = any(predictions.get(i, "").lower() == "pen" for i in predictions)
-            eraser_detected = any(predictions.get(i, "").lower() == "eraser" for i in predictions)
-            
-            if pen_detected:
-                cv2.putText(image, "PEN DETECTED - DRAWING", (10, 50), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (50, 255, 50), 2)
-            elif eraser_detected:
-                cv2.putText(image, "ERASER DETECTED - ERASING", (10, 50), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-        else:
-            cv2.putText(image, "MODELS NOT LOADED - DATASET MODE ONLY", (10, 50), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-
         # FPS counter
         cv2.putText(image, f"FPS: {int(fps)}", (10, image.shape[0] - 10), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)

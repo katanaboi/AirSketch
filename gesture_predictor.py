@@ -34,7 +34,18 @@ class GesturePredictor:
             return None
         
         array = np.array(points, dtype=np.float32).reshape(21, 2)
-        array -= array[0]  # Normalize to wrist
+        
+        # Normalize to wrist
+        array -= array[0]
+        
+        # Scale normalization
+        distances = np.linalg.norm(array, axis=1)
+        max_distance = np.max(distances)
+        
+        if max_distance > 0:
+            scale_factor = 1.0 / max_distance
+            array *= scale_factor
+        
         return array.flatten().reshape(1, -1)
     
     def _get_reconstruction_error(self, data):

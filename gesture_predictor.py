@@ -12,20 +12,26 @@ class GesturePredictor:
         self.autoencoder = None
         self.class_names = None
         self.threshold = None
-        
+
     def load_models(self) -> bool:
         try:
             self.classifier = tf.lite.Interpreter("models/tflite/gesture_classifier.tflite")
             self.classifier.allocate_tensors()
-            
+
             self.autoencoder = tf.lite.Interpreter("models/tflite/autoencoder.tflite")
             self.autoencoder.allocate_tensors()
-            
+
             self.class_names = joblib.load("models/label_encoder.pkl").classes_
             with open("models/threshold.json") as f:
                 self.threshold = json.load(f)["threshold"]
             return True
         except Exception:
+            # --- MODIFICATION ---
+            print("--- ERROR LOADING GESTURE MODEL ---")
+            import traceback
+            traceback.print_exc()
+            print("-------------------------------------")
+            # --- END MODIFICATION ---
             return False
     
     def _prepare_landmarks(self, landmarks):

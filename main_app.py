@@ -2,6 +2,7 @@ import os
 import time
 import cv2
 import mediapipe as mp
+import traceback
 
 from gesture_predictor import initialize_models, predict_gesture, predict_gesture_no_threshold
 from drawing_predictor import initialize_drawing_models, predict_drawing_gesture
@@ -114,9 +115,9 @@ def main():
                     elif detection_mode and detection_models_loaded:
                         try:
                             # Use threshold-based prediction (comment/uncomment as needed)
-                            prediction = predict_gesture(hand_landmarks)  # WITH threshold
-                            # prediction = predict_gesture_no_threshold(hand_landmarks)  # WITHOUT threshold
-                            
+                            # prediction = predict_gesture(hand_landmarks)  # WITH threshold
+                            prediction = predict_gesture_no_threshold(hand_landmarks)  # WITHOUT threshold
+
                             if prediction:
                                 gesture, confidence = prediction
                                 predictions[i] = str(gesture)
@@ -124,6 +125,11 @@ def main():
                                 predictions[i] = "?"
                         except Exception as e:
                             predictions[i] = "?"
+                            # --- ADD THESE LINES ---
+                            print("--- PREDICTION FAILED ---")
+                            traceback.print_exc()
+                            print("-------------------------")
+                            # --- END OF ADDED LINES ---
 
                     # Data collection
                     if dataset_creator.collect_frame_data(hand_landmarks, frame_counter):

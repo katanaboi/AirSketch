@@ -104,7 +104,7 @@ def main():
 
     with mp_hands.Hands(
             model_complexity=0,
-            min_detection_confidence=0.5,
+            min_detection_confidence=0.8,
             min_tracking_confidence=0.5,
             max_num_hands=2
     ) as hands:
@@ -206,9 +206,9 @@ def main():
                                                 send_message(conn, f"GES:{str(gesture)}")
                                                 print(f"Ges:{str(gesture)}")
                                             else:
-                                                predictions[i] = "none"
+                                                predictions[i] = "?"
                                         except Exception as e:
-                                            predictions[i] = "none"
+                                            predictions[i] = "?"
                                             print("--- PREDICTION FAILED ---")
                                             traceback.print_exc()
                                             print("-------------------------")

@@ -48,8 +48,8 @@ def main():
     ui_handler = UIHandler()
     
     # App modes
-    landmark_mode = True   # Default mode - just landmarks
-    detection_mode = False # Custom detection mode
+    landmark_mode = False   # Default mode - just landmarks
+    detection_mode = True # Custom detection mode
     drawing_mode = False   # Drawing mode
     
     frame_counter = 0
@@ -115,8 +115,8 @@ def main():
                     elif detection_mode and detection_models_loaded:
                         try:
                             # Use threshold-based prediction (comment/uncomment as needed)
-                            # prediction = predict_gesture(hand_landmarks)  # WITH threshold
-                            prediction = predict_gesture_no_threshold(hand_landmarks)  # WITHOUT threshold
+                            prediction = predict_gesture(hand_landmarks)  # WITH threshold
+                            #prediction = predict_gesture_no_threshold(hand_landmarks)  # WITHOUT threshold
 
                             if prediction:
                                 gesture, confidence = prediction

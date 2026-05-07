@@ -48,8 +48,8 @@ def main():
     ui_handler = UIHandler()
     
     # App modes
-    landmark_mode = False   # Default mode - just landmarks
-    detection_mode = True # Custom detection mode
+    landmark_mode = True   # Default mode - just landmarks
+    detection_mode = False # Custom detection mode
     drawing_mode = False   # Drawing mode
     
     frame_counter = 0

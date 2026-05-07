@@ -5,7 +5,31 @@ import mediapipe as mp
 import traceback
 import socket
 import struct
+import threading
 import numpy as np
+
+DISCOVERY_PORT = 9998
+DISCOVERY_MAGIC = "MRSIGN"
+
+def _lan_ip() -> str:
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    finally:
+        s.close()
+
+def _broadcast_presence(server_port: int):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    while True:
+        ip = _lan_ip()
+        msg = f"{DISCOVERY_MAGIC}|{ip}|{server_port}".encode("utf-8")
+        try:
+            s.sendto(msg, ("255.255.255.255", DISCOVERY_PORT))
+        except OSError:
+            pass
+        time.sleep(1.0)
 
 from gesture_predictor import initialize_models, predict_gesture, predict_gesture_no_threshold
 from drawing_predictor import initialize_drawing_models, predict_drawing_gesture
@@ -101,6 +125,9 @@ def main():
     print("- 'W': Drawing Mode (pen/eraser) | 'C': Clear drawing")
     print("- 'M': Manual mode | 'L': Change label | 'R': Record | ESC: Exit")
     print("\nStarting camera...")
+
+    threading.Thread(target=_broadcast_presence, args=(HOST_PORT,), daemon=True).start()
+    print(f"[*] Discovery broadcast running on UDP {DISCOVERY_PORT}")
 
     with mp_hands.Hands(
             model_complexity=0,

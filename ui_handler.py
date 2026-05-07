@@ -73,42 +73,42 @@ class UIHandler:
     def draw_legend(image, landmark_mode, detection_mode, drawing_mode, dataset_mode):
         """Draw Apple-style legend"""
         h, w = image.shape[:2]
-        
-        # Legend background
-        legend_w, legend_h = 280, 140
-        x = w - legend_w - 20
-        y = 20
-        
-        # Rounded rectangle background
-        overlay = image.copy()
-        cv2.rectangle(overlay, (x, y), (x + legend_w, y + legend_h), (40, 40, 40), -1)
-        cv2.addWeighted(overlay, 0.85, image, 0.15, 0, image)
+    #
+    #     # Legend background
+    #     legend_w, legend_h = 280, 140
+    #     x = w - legend_w - 20
+    #     y = 20
+    #
+    #     # Rounded rectangle background
+    #     overlay = image.copy()
+    #     cv2.rectangle(overlay, (x, y), (x + legend_w, y + legend_h), (40, 40, 40), -1)
+    #     cv2.addWeighted(overlay, 0.85, image, 0.15, 0, image)
         
         # Border
-        cv2.rectangle(image, (x, y), (x + legend_w, y + legend_h), (200, 200, 200), 1)
+        # cv2.rectangle(image, (x, y), (x + legend_w, y + legend_h), (200, 200, 200), 1)
         
         # Title
-        cv2.putText(image, "AirSketch", (x + 15, y + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-        
-        # Mode indicators
-        modes = [
-            ("E", "Landmarks", landmark_mode, (100, 255, 100)),
-            ("Q", "Detection", detection_mode, (255, 200, 0)),
-            ("W", "Drawing", drawing_mode, (0, 150, 255)),
-            ("D", "Dataset", dataset_mode, (255, 150, 0))
-        ]
-        
-        for i, (key, name, active, color) in enumerate(modes):
-            y_pos = y + 45 + i * 20
-            
-            # Key badge
-            badge_color = color if active else (100, 100, 100)
-            cv2.rectangle(image, (x + 15, y_pos - 12), (x + 35, y_pos + 2), badge_color, -1)
-            cv2.putText(image, key, (x + 18, y_pos - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
-            
-            # Mode name
-            text_color = (255, 255, 255) if active else (150, 150, 150)
-            cv2.putText(image, name, (x + 45, y_pos - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.45, text_color, 1)
+        # cv2.putText(image, "AirSketch", (x + 15, y + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        #
+        # # Mode indicators
+        # modes = [
+        #     ("E", "Landmarks", landmark_mode, (100, 255, 100)),
+        #     ("Q", "Detection", detection_mode, (255, 200, 0)),
+        #     ("W", "Drawing", drawing_mode, (0, 150, 255)),
+        #     ("D", "Dataset", dataset_mode, (255, 150, 0))
+        # ]
+        #
+        # for i, (key, name, active, color) in enumerate(modes):
+        #     y_pos = y + 45 + i * 20
+        #
+        #     # Key badge
+        #     badge_color = color if active else (100, 100, 100)
+        #     cv2.rectangle(image, (x + 15, y_pos - 12), (x + 35, y_pos + 2), badge_color, -1)
+        #     cv2.putText(image, key, (x + 18, y_pos - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
+        #
+        #     # Mode name
+        #     text_color = (255, 255, 255) if active else (150, 150, 150)
+        #     cv2.putText(image, name, (x + 45, y_pos - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.45, text_color, 1)
 
     @staticmethod
     def draw_status_indicators(image, detection_models_loaded, drawing_models_loaded, predictions, is_recording, fps):

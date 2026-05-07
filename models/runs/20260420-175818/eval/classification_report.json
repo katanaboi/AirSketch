@@ -1,0 +1,87 @@
+{
+  "Thumb_Down": {
+    "precision": 1.0,
+    "recall": 0.9726027397260274,
+    "f1-score": 0.9861111111111112,
+    "support": 73.0
+  },
+  "Thumb_Up": {
+    "precision": 0.9883720930232558,
+    "recall": 1.0,
+    "f1-score": 0.9941520467836257,
+    "support": 85.0
+  },
+  "a": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1-score": 1.0,
+    "support": 22.0
+  },
+  "b": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1-score": 1.0,
+    "support": 24.0
+  },
+  "c": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1-score": 1.0,
+    "support": 33.0
+  },
+  "d": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1-score": 1.0,
+    "support": 22.0
+  },
+  "e": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1-score": 1.0,
+    "support": 22.0
+  },
+  "eat": {
+    "precision": 1.0,
+    "recall": 0.9795918367346939,
+    "f1-score": 0.9896907216494846,
+    "support": 49.0
+  },
+  "like": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1-score": 1.0,
+    "support": 110.0
+  },
+  "me": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1-score": 1.0,
+    "support": 62.0
+  },
+  "nasi_lemak": {
+    "precision": 0.975609756097561,
+    "recall": 1.0,
+    "f1-score": 0.9876543209876543,
+    "support": 80.0
+  },
+  "you": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1-score": 1.0,
+    "support": 71.0
+  },
+  "accuracy": 0.9954058192955589,
+  "macro avg": {
+    "precision": 0.9969984874267347,
+    "recall": 0.9960162147050601,
+    "f1-score": 0.996467350044323,
+    "support": 653.0
+  },
+  "weighted avg": {
+    "precision": 0.9954983283227895,
+    "recall": 0.9954058192955589,
+    "f1-score": 0.9954000400115718,
+    "support": 653.0
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "timestamp": "20260422-170947",
+  "git_sha": "dc33f3150d449e66c87f37623784168f9da43693",
+  "dataset": "D:\\github\\AirSketch\\data\\hand_landmarks_dataset.csv",
+  "dataset_rows": 12024,
+  "seed": 42,
+  "classes": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N",
+    "O",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
+    "Thumb_Down",
+    "Thumb_Up",
+    "U",
+    "V",
+    "W",
+    "X",
+    "Y",
+    "Z",
+    "eat",
+    "like",
+    "me",
+    "nasi_lemak",
+    "you"
+  ],
+  "num_classes": 33,
+  "classifier": {
+    "cv_val_accuracy": [
+      0.9968814849853516,
+      0.9968814849853516,
+      0.9979209899902344,
+      0.9927234649658203,
+      0.9958398342132568
+    ],
+    "mean_cv_accuracy": 0.996049451828003,
+    "best_fold": 3,
+    "test_accuracy": 0.9958419958419958,
+    "augment": true,
+    "class_weight": "balanced"
+  },
+  "autoencoder": {
+    "cv_val_loss": [
+      0.0019932494033128023,
+      0.0019331247312948108,
+      0.0021544755436480045,
+      0.0018865626771003008,
+      0.0018392467172816396
+    ],
+    "mean_cv_val_loss": 0.0019613318145275116,
+    "best_fold": 5,
+    "threshold": 0.007929590065032244
+  }
+}

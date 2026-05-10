@@ -216,7 +216,7 @@ def main():
                                                 gesture, confidence = prediction
                                                 predictions[i] = str(gesture)
                                                 # --- NEW: Send gesture back to client ---
-                                                send_message(conn, f"GES:{str(gesture)}")
+                                                send_message(conn, f"GES:{str(gesture)}|{confidence:.3f}")
                                             else:
                                                 predictions[i] = "?"
                                         except Exception as e:
@@ -230,7 +230,7 @@ def main():
                                                 gesture, confidence = prediction
                                                 predictions[i] = str(gesture)
                                                 # --- NEW: Send gesture back to client ---
-                                                send_message(conn, f"GES:{str(gesture)}")
+                                                send_message(conn, f"GES:{str(gesture)}|{confidence:.3f}")
                                                 print(f"Ges:{str(gesture)}")
                                             else:
                                                 predictions[i] = "?"

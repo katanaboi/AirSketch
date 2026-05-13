@@ -65,8 +65,8 @@ def main():
     print("\nStarting camera...")
 
     with mp_hands.Hands(
-        model_complexity=0,
-        min_detection_confidence=0.8,
+        model_complexity=1,
+        min_detection_confidence=0.5,
         min_tracking_confidence=0.5,
         max_num_hands=2
     ) as hands:
